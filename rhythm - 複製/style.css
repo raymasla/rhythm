@@ -1,0 +1,81 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+    margin: 0; padding: 0; background-color: #050508; color: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden; touch-action: none; user-select: none;
+}
+
+#game-container { width: 100vw; height: 100vh; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.scene { width: 100%; height: 100%; position: absolute; top: 0; left: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.hidden { display: none !important; }
+
+.title { font-size: clamp(1.5rem, 5vw, 2rem); letter-spacing: 2px; margin-bottom: 15px; color: #e0e0e0; text-align: center; padding: 0 20px; }
+.subtitle { color: #888; font-size: clamp(0.8rem, 3vw, 1rem); margin-bottom: 30px; text-align: center; padding: 0 20px; }
+
+.box-container { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; max-width: 90%; }
+.menu-box {
+    width: clamp(150px, 40vw, 220px); height: clamp(100px, 20vh, 150px);
+    background: #0d0d0d; border: 2px solid #333; color: #fff; font-size: clamp(1rem, 4vw, 1.2rem);
+    font-weight: bold; cursor: pointer; border-radius: 12px; transition: all 0.2s ease;
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+}
+.menu-box:hover, .menu-box:active { border-color: #00f0ff; box-shadow: 0 0 20px rgba(0, 240, 255, 0.4); background: #111; transform: scale(0.98); }
+
+.btn-small { height: 70px; font-size: 1.1rem; }
+.btn-group { margin-top: 20px; }
+
+#animation-area { position: relative; width: 100%; height: 120px; margin-bottom: 20px; }
+#bouncing-ball { position: absolute; left: 50%; bottom: 10px; width: 25px; height: 25px; background-color: #ffffff; border-radius: 50%; transform: translateX(-50%); box-shadow: 0 0 15px #fff; }
+#ground-line { position: absolute; bottom: 0; left: 20%; width: 60%; height: 2px; background-color: #555; }
+.control-panel { display: flex; justify-content: center; align-items: center; gap: 15px; width: 80%; max-width: 400px; margin-bottom: 20px; }
+#latency-slider { flex: 1; -webkit-appearance: none; height: 4px; border-radius: 2px; background: #333; outline: none; }
+#latency-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #00f0ff; box-shadow: 0 0 10px #00f0ff; }
+#latency-value { font-size: 1.2rem; font-weight: bold; color: #00f0ff; min-width: 70px; }
+
+#carousel-container { position: relative; width: 100%; height: 40vh; perspective: 1000px; display: flex; align-items: center; justify-content: center; }
+.song-item {
+    position: absolute; width: clamp(250px, 80vw, 320px); height: 80px;
+    background: rgba(15, 15, 25, 0.95); border: 2px solid #222; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: bold; color: #555;
+    transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), color 0.3s, border-color 0.3s, box-shadow 0.3s;
+    cursor: pointer;
+}
+.song-item.active { color: #00f0ff; border-color: #00f0ff; background: rgba(0, 240, 255, 0.08); box-shadow: 0 0 25px rgba(0, 240, 255, 0.4); z-index: 10; }
+.hint-text { color: #666; font-size: 0.9rem; margin-top: 30px; text-align: center; line-height: 1.5; }
+
+#difficulty-modal { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+.modal-content { background: #0a0a0f; border: 2px solid #00f0ff; padding: 30px 20px; border-radius: 16px; text-align: center; box-shadow: 0 0 40px rgba(0, 240, 255, 0.2); width: 100%; max-width: 350px; }
+.modal-content h2 { margin: 0 0 20px 0; color: #fff; font-size: 1.5rem; text-shadow: 0 0 10px #00f0ff; }
+.diff-btn { margin: 12px 0; padding: 15px; background: #141414; border: 1px solid #333; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 1.1rem; }
+.diff-btn:hover, .diff-btn:active { background: #00f0ff; color: #000; font-weight: bold; box-shadow: 0 0 20px #00f0ff; transform: scale(0.98); }
+.diff-btn small { display: block; font-size: 0.8rem; opacity: 0.7; margin-top: 5px; }
+.close-btn { margin-top: 20px; color: #888; cursor: pointer; text-decoration: underline; padding: 10px; }
+
+#game-stage { width: 100%; height: 100%; position: relative; display: flex; justify-content: center; }
+#lanes-container { display: flex; width: 100%; max-width: 600px; height: 100%; border-left: 1px solid #333; border-right: 1px solid #333; perspective: 500px; }
+.lane { flex: 1; border-right: 1px solid rgba(255,255,255,0.05); position: relative; background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.02)); }
+.lane:last-child { border-right: none; }
+
+.hit-pad {
+    position: absolute; bottom: 10%; width: 100%; height: 80px;
+    background: rgba(255, 255, 255, 0.05); border-top: 2px solid #555; border-bottom: 2px solid #222;
+    transition: transform 0.05s, box-shadow 0.1s, background 0.1s, border-color 0.1s;
+    z-index: 20;
+}
+.hit-pad.active {
+    transform: translateY(8px);
+    background: rgba(0, 240, 255, 0.4);
+    border-top: 4px solid #fff;
+    box-shadow: 0 0 30px #00f0ff, inset 0 0 20px #00f0ff;
+}
+
+/* --- 音符下落樣式 --- */
+.note {
+    position: absolute; width: 80%; height: 20px; background: #fff;
+    left: 10%; border-radius: 6px; box-shadow: 0 0 15px #fff; z-index: 10;
+}
+.note.hold { background: rgba(0, 240, 255, 0.8); border: 2px solid #00f0ff; box-shadow: 0 0 15px #00f0ff; }
+
+#rule-toast { position: absolute; top: 30%; width: 90%; text-align: center; font-size: clamp(1.2rem, 4vw, 1.8rem); color: #00f0ff; font-weight: bold; text-shadow: 0 0 20px #00f0ff; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 10px; animation: fadeOutUp 2.5s forwards; z-index: 50; }
+@keyframes fadeOutUp { 0% { opacity: 0; transform: translateY(20px); } 15% { opacity: 1; transform: translateY(0); } 85% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
