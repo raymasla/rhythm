@@ -2,10 +2,9 @@ let gameConfig = { device: '', hasHeadphones: false, latency: 0 };
 let audioCtx;
 let nextBeatTime = 0; let beatInterval = 0.5; let audioTimerId; let animationFrameId;
 
-// 遊戲狀態與判定數據
 let currentNotesData = [];
 let gameStartTime = 0;
-let gameOverTimer = null;
+let gameOverTimer = null; // 控制結算的計時器
 const NOTE_SPEED = 2.0; 
 const frequencies = [329.63, 392.00, 440.00, 523.25];
 
@@ -19,7 +18,6 @@ const songs = [
 ];
 let currentSongIndex = 0;
 
-// 自動請求全螢幕 (解決手機版面問題)
 function requestFullscreen() {
     let el = document.documentElement;
     if (el.requestFullscreen) el.requestFullscreen();
@@ -31,12 +29,8 @@ function showScene(sceneId) {
     document.getElementById(sceneId).classList.remove('hidden');
 }
 
-// ================= 階段一與二 =================
-function selectDevice(type) { 
-    gameConfig.device = type; 
-    requestFullscreen(); // 點擊時進入全螢幕
-    showScene('step-audio'); 
-}
+// 階段一、二、三：初始化與延遲校正
+function selectDevice(type) { gameConfig.device = type; requestFullscreen(); showScene('step-audio'); }
 function selectAudio(hasHeadphones) {
     gameConfig.hasHeadphones = hasHeadphones;
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -44,7 +38,6 @@ function selectAudio(hasHeadphones) {
     else { gameConfig.latency = 0; enterSongSelect(); }
 }
 
-// ================= 階段三：延遲校正 =================
 const ball = document.getElementById('bouncing-ball');
 const slider = document.getElementById('latency-slider');
 slider.addEventListener('input', (e) => {
@@ -75,7 +68,7 @@ function renderCalibrationLoop() {
 function goBackToAudio() { clearTimeout(audioTimerId); cancelAnimationFrame(animationFrameId); showScene('step-audio'); }
 function confirmLatency() { clearTimeout(audioTimerId); cancelAnimationFrame(animationFrameId); enterSongSelect(); }
 
-// ================= 階段四：選單 =================
+// 階段四：歌曲選單
 const carousel = document.getElementById('carousel-container');
 function enterSongSelect() { showScene('step-song-select'); initCarousel(); }
 function initCarousel() {
@@ -102,12 +95,10 @@ window.addEventListener('keydown', (e) => {
         else if (e.key === 'Enter') { if (currentSongIndex === 0) openModal(); else alert("尚未解鎖！"); }
     }
 });
-
 let touchStartY = 0;
 window.addEventListener('touchstart', e => { 
     if(document.getElementById('step-game').classList.contains('hidden')) touchStartY = e.touches[0].clientY; 
 }, {passive: false});
-
 window.addEventListener('touchend', e => {
     if (!document.getElementById('step-song-select').classList.contains('hidden') && document.getElementById('difficulty-modal').classList.contains('hidden')) {
         let diff = touchStartY - e.changedTouches[0].clientY;
@@ -120,15 +111,19 @@ window.addEventListener('touchend', e => {
 function openModal() { document.getElementById('selected-song-title').innerText = songs[currentSongIndex].name; document.getElementById('difficulty-modal').classList.remove('hidden'); }
 function closeModal() { document.getElementById('difficulty-modal').classList.add('hidden'); }
 
-// ================= 階段五：判定系統與遊戲核心 =================
+// ======== 修改重點 2：徹底修復第二局凍結 Bug ========
 function startGame(difficulty) {
     closeModal(); 
     showScene('step-game');
     
-    // 重置分數
+    // 嚴格清空上一局的計時器，防止卡在結算畫面前
+    if (gameOverTimer) {
+        clearTimeout(gameOverTimer);
+        gameOverTimer = null;
+    }
+    
     stats = { S: 0, A: 0, C: 0, combo: 0, maxCombo: 0 };
     updateComboDisplay();
-    if(gameOverTimer) clearTimeout(gameOverTimer);
 
     const ruleToast = document.getElementById('rule-toast');
     if (difficulty === 'extreme-easy') ruleToast.innerText = "【極度簡單】 按任意鍵";
@@ -142,13 +137,10 @@ function startGame(difficulty) {
     loadAndPlaySong(); 
 }
 
-// 顯示 UI Combo 特效
 function showJudgement(type) {
     const jText = document.getElementById('judgement-text');
     const cText = document.getElementById('combo-text');
-    
-    jText.classList.remove('pop-anim');
-    void jText.offsetWidth; // 觸發重繪
+    jText.classList.remove('pop-anim'); void jText.offsetWidth; 
     
     if(type === 'C') {
         jText.innerText = "C (MISS)"; jText.style.color = "#ff3366"; jText.style.textShadow = "0 0 10px #ff3366";
@@ -156,15 +148,14 @@ function showJudgement(type) {
     } else {
         jText.innerText = type; jText.style.color = (type === 'S+') ? "#00f0ff" : "#00ff88";
         jText.style.textShadow = `0 0 15px ${jText.style.color}`;
-        stats.combo++;
-        if(stats.combo > stats.maxCombo) stats.maxCombo = stats.combo;
+        stats.combo++; if(stats.combo > stats.maxCombo) stats.maxCombo = stats.combo;
         cText.innerText = `${stats.combo} COMBO`;
     }
     jText.classList.add('pop-anim');
 }
 function updateComboDisplay() { document.getElementById('judgement-text').innerText = ""; document.getElementById('combo-text').innerText = ""; }
 
-// 真實時間碰撞判定 (代替面積重疊)
+// ======== 修改重點 3：全新高精度判定系統 ========
 function hitLane(laneIndex) {
     const pad = document.getElementById(`pad-${laneIndex}`);
     if (pad) {
@@ -175,20 +166,23 @@ function hitLane(laneIndex) {
 
     let gameTime = audioCtx.currentTime - (gameConfig.latency / 1000) - gameStartTime;
     
-    // 尋找該軌道中最接近判定線的未擊打音符
-    let target = currentNotesData.find(n => !n.hit && n.lane === laneIndex && (n.time - gameTime) < 0.25);
+    // 步驟 1：找出在有效判定區間內 (±0.2秒內) 且還沒被打擊過的所有音符
+    let validNotes = currentNotesData.filter(n => !n.hit && n.lane === laneIndex && Math.abs(n.time - gameTime) <= 0.2);
     
-    if (target) {
+    if (validNotes.length > 0) {
+        // 步驟 2：從有效音符中，找出「距離當前時間最近」的那一顆，保證不會抓到其他顆
+        let target = validNotes.sort((a, b) => Math.abs(a.time - gameTime) - Math.abs(b.time - gameTime))[0];
+        
         let offset = Math.abs(target.time - gameTime);
+        target.hit = true; 
+
         if (offset <= 0.08) {
-            // S+ (完美重疊超過一半)
-            target.hit = true; stats.S++; showJudgement('S+');
-            if(target.element) target.element.style.display = 'none'; // 擊中消失
-        } else if (offset <= 0.18) {
-            // A (只有邊角擦到)
-            target.hit = true; stats.A++; showJudgement('A');
-            if(target.element) target.element.style.display = 'none'; // 擊中消失
+            stats.S++; showJudgement('S+');
+        } else {
+            stats.A++; showJudgement('A');
         }
+        
+        if (target.element) target.element.style.display = 'none'; // 擊中瞬間消失
     }
 }
 
@@ -206,10 +200,9 @@ function setupGameplayInput(difficulty) {
         }
     };
 
-    // 多點觸控支援：讀取 e.changedTouches，解決無法同時按的 Bug
     window.ontouchstart = (e) => {
         if (document.getElementById('step-game').classList.contains('hidden')) return;
-        e.preventDefault(); // 完全阻止縮放
+        e.preventDefault(); 
         let width = window.innerWidth;
 
         for(let i=0; i<e.changedTouches.length; i++) {
@@ -237,14 +230,15 @@ async function loadAndPlaySong() {
         const songData = await response.json();
         currentNotesData = JSON.parse(JSON.stringify(songData.notes)); 
         
-        gameStartTime = audioCtx.currentTime + 2.0; // 延遲2秒開局
+        gameStartTime = audioCtx.currentTime + 2.0; 
         requestAnimationFrame(updateGameLoop);
     } catch (error) {
         console.error(error);
-        alert("無法讀取 map.json！請確認使用 Live Server。");
+        alert("無法讀取 map.json！");
     }
 }
 
+// 畫面渲染循環
 function updateGameLoop() {
     if (document.getElementById('step-game').classList.contains('hidden')) return;
 
@@ -252,7 +246,6 @@ function updateGameLoop() {
     const lanes = document.querySelectorAll('.lane');
 
     currentNotesData.forEach(note => {
-        // 生成音符
         if (!note.element && (note.time - gameTime) <= NOTE_SPEED) {
             let noteEl = document.createElement('div');
             noteEl.className = 'note';
@@ -260,33 +253,31 @@ function updateGameLoop() {
             note.element = noteEl;
         }
 
-        // 下落與漏接 (C) 判定
         if (note.element && !note.hit) {
             let progress = 1 - ((note.time - gameTime) / NOTE_SPEED);
-            note.element.style.top = `${progress * 90}%`;
+            // 改為跟打擊墊同樣的 top: 85% 對齊法，當 progress=1 時完美重疊
+            note.element.style.top = `${progress * 85}%`;
 
-            // 當超過打擊視窗 (錯過)
-            if ((gameTime - note.time) > 0.18) {
+            // 如果錯過視窗 (>0.2秒)，強制判定為 C (Miss)
+            if ((gameTime - note.time) > 0.2) {
                 note.hit = true;
                 stats.C++;
                 showJudgement('C');
-                note.element.style.opacity = '0.3'; // 變暗滑出畫面
+                note.element.style.opacity = '0.3'; 
             }
         }
     });
 
-    // 檢查結束條件：過濾掉已經判定過的音符
     let unhitNotes = currentNotesData.filter(note => !note.hit);
     
     if (unhitNotes.length > 0) {
         requestAnimationFrame(updateGameLoop);
     } else {
-        // 所有音符都結算了，等待 2 秒後顯示結算畫面
+        // 遊戲結束，等待 2 秒顯示結算
         if(!gameOverTimer) gameOverTimer = setTimeout(showScoreboard, 2000);
     }
 }
 
-// 結算畫面
 function showScoreboard() {
     document.getElementById('res-s').innerText = stats.S;
     document.getElementById('res-a').innerText = stats.A;
@@ -296,7 +287,11 @@ function showScoreboard() {
 }
 
 function backToMenu() {
-    // 清除畫面上殘留的音符元素
+    // 按下返回時，也必須徹底清空計時器
+    if (gameOverTimer) {
+        clearTimeout(gameOverTimer);
+        gameOverTimer = null;
+    }
     document.querySelectorAll('.note').forEach(el => el.remove());
     showScene('step-song-select');
 }
