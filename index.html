@@ -28,17 +28,14 @@
         <div id="step-latency" class="scene hidden">
             <h2 class="title">校正音訊延遲</h2>
             <p class="subtitle">調整下方旋鈕，讓「白球觸地」與「嗶聲」同步</p>
-            
             <div id="animation-area">
                 <div id="bouncing-ball"></div>
                 <div id="ground-line"></div>
             </div>
-
             <div class="control-panel">
                 <input type="range" id="latency-slider" min="0" max="500" value="0" step="1">
                 <span id="latency-value">0 ms</span>
             </div>
-
             <div class="box-container btn-group">
                 <button class="menu-box btn-small" onclick="goBackToAudio()">返回</button>
                 <button class="menu-box btn-small" onclick="confirmLatency()">確認</button>
@@ -63,6 +60,12 @@
 
         <div id="step-game" class="scene hidden">
             <div id="rule-toast" class="hidden">操作規則</div>
+            
+            <div id="combo-display">
+                <div id="judgement-text"></div>
+                <div id="combo-text"></div>
+            </div>
+
             <div id="game-stage">
                 <div id="lanes-container">
                     <div class="lane"><div class="hit-pad" id="pad-0"></div></div>
@@ -70,6 +73,17 @@
                     <div class="lane"><div class="hit-pad" id="pad-2"></div></div>
                     <div class="lane"><div class="hit-pad" id="pad-3"></div></div>
                 </div>
+            </div>
+        </div>
+
+        <div id="step-result" class="scene hidden">
+            <div class="modal-content result-panel">
+                <h2 class="title">歌曲結算</h2>
+                <div class="score-row"><span class="rank-s">S+</span> <span id="res-s">0</span></div>
+                <div class="score-row"><span class="rank-a">A</span> <span id="res-a">0</span></div>
+                <div class="score-row"><span class="rank-c">C</span> <span id="res-c">0</span></div>
+                <div class="score-row combo-row">MAX COMBO <span id="res-max">0</span></div>
+                <button class="menu-box btn-small" style="margin-top:20px;" onclick="backToMenu()">回主選單</button>
             </div>
         </div>
 
