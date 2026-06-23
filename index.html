@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Ray's Rhythm Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        
+        <div id="step-device" class="scene">
+            <h2 class="title">請選擇遊玩設備</h2>
+            <div class="box-container">
+                <button class="menu-box" onclick="selectDevice('PC')">電腦 (PC)</button>
+                <button class="menu-box" onclick="selectDevice('Mobile')">手機 (Mobile)</button>
+            </div>
+        </div>
+
+        <div id="step-audio" class="scene hidden">
+            <h2 class="title">您是否配戴耳機？</h2>
+            <div class="box-container">
+                <button class="menu-box" onclick="selectAudio(true)">有戴耳機</button>
+                <button class="menu-box" onclick="selectAudio(false)">沒有戴耳機</button>
+            </div>
+        </div>
+
+        <div id="step-latency" class="scene hidden">
+            <h2 class="title">校正音訊延遲</h2>
+            <p class="subtitle">調整下方旋鈕，讓「白球觸地」與「嗶聲」同步</p>
+            
+            <div id="animation-area">
+                <div id="bouncing-ball"></div>
+                <div id="ground-line"></div>
+            </div>
+
+            <div class="control-panel">
+                <input type="range" id="latency-slider" min="0" max="500" value="0" step="1">
+                <span id="latency-value">0 ms</span>
+            </div>
+
+            <div class="box-container btn-group">
+                <button class="menu-box btn-small" onclick="goBackToAudio()">返回</button>
+                <button class="menu-box btn-small" onclick="confirmLatency()">確認</button>
+            </div>
+        </div>
+
+        <div id="step-song-select" class="scene hidden">
+            <h2 class="title">選擇歌曲</h2>
+            <div id="carousel-container"></div>
+            <p class="hint-text">🔼 🔽 使用方向鍵 或 螢幕上下輕滑選擇<br>按下 Enter 或 點擊歌曲確認</p>
+        </div>
+
+        <div id="difficulty-modal" class="hidden">
+            <div class="modal-content">
+                <h2 id="selected-song-title">歌曲名稱</h2>
+                <div class="diff-btn" onclick="startGame('extreme-easy')">極度簡單<br><small>單鍵操作 (任意鍵同發)</small></div>
+                <div class="diff-btn" onclick="startGame('easy')">簡單<br><small>雙鍵操作 (左 F / 右 J)</small></div>
+                <div class="diff-btn" onclick="startGame('normal')">普通<br><small>四鍵模式 (D, F, J, K)</small></div>
+                <div class="close-btn" onclick="closeModal()">返回選單</div>
+            </div>
+        </div>
+
+        <div id="step-game" class="scene hidden">
+            <div id="rule-toast" class="hidden">操作規則</div>
+            <div id="game-stage">
+                <div id="lanes-container">
+                    <div class="lane"><div class="hit-pad" id="pad-0"></div></div>
+                    <div class="lane"><div class="hit-pad" id="pad-1"></div></div>
+                    <div class="lane"><div class="hit-pad" id="pad-2"></div></div>
+                    <div class="lane"><div class="hit-pad" id="pad-3"></div></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
