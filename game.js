@@ -6,8 +6,10 @@ let currentNotesData = [];
 let gameStartTime = 0;
 let gameOverTimer = null; 
 let currentDifficulty = '';
-const NOTE_SPEED = 2.0; 
-const frequencies = [329.63, 392.00, 440.00, 523.25];
+let currentNoteSpeed = 2.0; // 玩家自訂的掉落速度
+
+// 對應 6 軌的電子音頻 (稍微擴展音域)
+const frequencies = [261.63, 329.63, 392.00, 440.00, 523.25, 659.25];
 
 let stats = { S: 0, A: 0, C: 0, combo: 0, maxCombo: 0 };
 
@@ -112,43 +114,65 @@ window.addEventListener('touchend', e => {
 function openModal() { document.getElementById('selected-song-title').innerText = songs[currentSongIndex].name; document.getElementById('difficulty-modal').classList.remove('hidden'); }
 function closeModal() { document.getElementById('difficulty-modal').classList.add('hidden'); }
 
-// 賽前準備視窗 (2秒後出現按鈕)
-let preGameReady = false;
+// 賽前說明與速度調整 (無需等待)
 function prepareGame(difficulty) {
     currentDifficulty = difficulty;
     closeModal();
     showScene('pre-game-modal');
-    preGameReady = false;
-    document.getElementById('start-game-btn').classList.add('hidden');
     
     let rulesText = "";
-    if (difficulty === 'extreme-easy') rulesText = "【極度簡單】<br>點擊螢幕任意處或鍵盤任意鍵即可。";
-    else if (difficulty === 'easy') rulesText = "【簡單模式】<br>將螢幕分左右兩側。<br>電腦版：左 F / 右 J。";
-    else if (difficulty === 'normal') rulesText = "【普通模式】<br>四軌獨立判定。<br>電腦版：D, F, J, K。";
-    else if (difficulty === 'hard') rulesText = "【稍微困難】<br>出現粉色滑動音符！<br>手機版：請用手指在螢幕上滑過軌道。<br>電腦版：滑動鍵為 S(左一), E(左二), I(右二), L(右一)，一般鍵為 D, F, J, K。";
+    if (difficulty === 'extreme-easy') rulesText = "【極度簡單】<br>點擊螢幕任意處或鍵盤任意鍵。";
+    else if (difficulty === 'easy') rulesText = "【簡單模式】<br>螢幕分左右兩側。<br>電腦版：左 F / 右 J。";
+    else if (difficulty === 'normal') rulesText = "【普通模式】(4軌)<br>四軌獨立判定。<br>電腦版：D, F, J, K。";
+    else if (difficulty === 'hard') rulesText = "【稍微困難】(6軌)<br>出現混合色彩滑動音符！<br>手機版：手指滑過軌道。<br>電腦版：普通鍵為 S, D, F, J, K, L<br>滑動鍵為 E(軌道2), I(軌道5)。";
     
     document.getElementById('pre-game-rules').innerHTML = rulesText;
-
-    setTimeout(() => {
-        preGameReady = true;
-        document.getElementById('start-game-btn').classList.remove('hidden');
-    }, 2000);
 }
 
 // 監聽 Enter 鍵直接開始
 window.addEventListener('keydown', (e) => {
-    if (!document.getElementById('pre-game-modal').classList.contains('hidden') && preGameReady && e.key === 'Enter') {
+    if (!document.getElementById('pre-game-modal').classList.contains('hidden') && e.key === 'Enter') {
         startGame();
     }
 });
 
-// ================= 階段五：判定系統與遊戲核心 =================
+// 動態生成遊戲軌道 (4軌或6軌)
+function generateLanes() {
+    const container = document.getElementById('lanes-container');
+    container.innerHTML = '';
+    let laneCount = (currentDifficulty === 'hard') ? 6 : 4;
+
+    for (let i = 0; i < laneCount; i++) {
+        let laneDiv = document.createElement('div');
+        laneDiv.className = 'lane';
+        
+        let padDiv = document.createElement('div');
+        padDiv.className = 'hit-pad';
+        padDiv.id = `pad-${i}`;
+        
+        // 稍微困難模式中，第 1 軌 (d/e) 和第 4 軌 (k/i) 套用粉色滑動樣式
+        if (currentDifficulty === 'hard' && (i === 1 || i === 4)) {
+            padDiv.classList.add('slide-pad');
+        }
+        
+        laneDiv.appendChild(padDiv);
+        container.appendChild(laneDiv);
+    }
+}
+
+// ================= 階段五：遊戲啟動與核心 =================
 function startGame() {
+    // 讀取玩家自訂的掉落速度
+    let speedVal = parseFloat(document.getElementById('speed-input').value);
+    currentNoteSpeed = (isNaN(speedVal) || speedVal <= 0) ? 2.0 : speedVal;
+
     showScene('step-game');
     if (gameOverTimer) { clearTimeout(gameOverTimer); gameOverTimer = null; }
     
     stats = { S: 0, A: 0, C: 0, combo: 0, maxCombo: 0 };
     updateComboDisplay();
+    
+    generateLanes(); // 動態畫出 4 軌或 6 軌
     setupGameplayInput(currentDifficulty);
     loadAndPlaySong(); 
 }
@@ -171,33 +195,29 @@ function showJudgement(type) {
 }
 function updateComboDisplay() { document.getElementById('judgement-text').innerText = ""; document.getElementById('combo-text').innerText = ""; }
 
-// 高精度判定：區分滑動與點擊，並加入「太早按」的 C 判定
+// 高精度判定：區分滑動與點擊，加入「太早按」的 C 判定
 function hitLane(laneIndex, isSlideInput) {
     const pad = document.getElementById(`pad-${laneIndex}`);
     if (pad) {
         pad.classList.add('active');
-        if(!isSlideInput) playPing(frequencies[laneIndex], audioCtx.currentTime, 0.1);
+        if(!isSlideInput) playPing(frequencies[laneIndex % frequencies.length], audioCtx.currentTime, 0.1);
         setTimeout(() => pad.classList.remove('active'), 100);
     }
 
     let gameTime = audioCtx.currentTime - (gameConfig.latency / 1000) - gameStartTime;
     
-    // 找出在有效區間內的未擊打音符 (放大判定範圍到 0.4 秒前，用來抓「太早按」)
     let validNotes = currentNotesData.filter(n => !n.hit && n.lane === laneIndex && (n.time - gameTime) > -0.2 && (n.time - gameTime) < 0.4);
     
     if (validNotes.length > 0) {
-        // 尋找目標：如果是滑動輸入，只找滑動音符；否則找普通音符。如果極度簡單/簡單則不強制區分。
         let target = validNotes.sort((a, b) => Math.abs(a.time - gameTime) - Math.abs(b.time - gameTime))[0];
         
-        // 在「稍微困難」模式下，嚴格要求滑動鍵只能打滑動音符，普通鍵打普通音符
         if (currentDifficulty === 'hard') {
             let isSlideNote = (target.type === 'slide');
-            if (isSlideInput !== isSlideNote) return; // 鍵位錯誤，直接忽略
+            if (isSlideInput !== isSlideNote) return; 
         }
 
-        let timeDiff = target.time - gameTime; // 正數代表提早，負數代表太晚
+        let timeDiff = target.time - gameTime; 
         
-        // 如果是點擊(Tap)，且提早太多(>0.18秒)，嚴格判定為 C！滑動則給予寬容，不計 Early Miss。
         if (!isSlideInput && timeDiff > 0.18) {
             target.hit = true; 
             stats.C++; showJudgement('C');
@@ -221,14 +241,13 @@ window.addEventListener('touchmove', (e) => {
     if (!document.getElementById('step-game').classList.contains('hidden')) {
         e.preventDefault(); 
         
-        // 手機版滑動 (Slide) 判定
         if (currentDifficulty === 'hard') {
             let width = window.innerWidth;
-            let section = width / 4;
+            let section = width / 6; // 6 等分
             for(let i=0; i<e.changedTouches.length; i++) {
                 let touchX = e.changedTouches[i].clientX;
                 let lane = Math.floor(touchX / section);
-                if (lane >= 0 && lane <= 3) hitLane(lane, true); // 觸發滑動判定
+                if (lane >= 0 && lane <= 5) hitLane(lane, true); 
             }
         }
     }
@@ -236,7 +255,6 @@ window.addEventListener('touchmove', (e) => {
 
 function setupGameplayInput(difficulty) {
     window.onkeydown = (e) => {
-        // 解決長按變成連打的 BUG！(e.repeat 判斷)
         if (document.getElementById('step-game').classList.contains('hidden') || e.repeat) return;
         const key = e.key.toLowerCase();
         
@@ -248,11 +266,13 @@ function setupGameplayInput(difficulty) {
             if (key === 'd') hitLane(0, false); if (key === 'f') hitLane(1, false);
             if (key === 'j') hitLane(2, false); if (key === 'k') hitLane(3, false);
         } else if (difficulty === 'hard') {
-            // 電腦版「稍微困難」：區分普通 (dfjk) 與 滑動 (seil)
-            if (key === 'd') hitLane(0, false); if (key === 'f') hitLane(1, false);
-            if (key === 'j') hitLane(2, false); if (key === 'k') hitLane(3, false);
-            if (key === 's') hitLane(0, true); if (key === 'e') hitLane(1, true);
-            if (key === 'i') hitLane(2, true); if (key === 'l') hitLane(3, true);
+            // 6 軌設定：s d f j k l (普通)，e i (滑動)
+            if (key === 's') hitLane(0, false); 
+            if (key === 'd') hitLane(1, false); if (key === 'e') hitLane(1, true);
+            if (key === 'f') hitLane(2, false); 
+            if (key === 'j') hitLane(3, false); 
+            if (key === 'k') hitLane(4, false); if (key === 'i') hitLane(4, true);
+            if (key === 'l') hitLane(5, false);
         }
     };
 
@@ -260,7 +280,8 @@ function setupGameplayInput(difficulty) {
         if (document.getElementById('step-game').classList.contains('hidden')) return;
         e.preventDefault(); 
         let width = window.innerWidth;
-        let section = width / 4;
+        let laneCount = (difficulty === 'hard') ? 6 : 4;
+        let section = width / laneCount;
 
         for(let i=0; i<e.changedTouches.length; i++) {
             let touchX = e.changedTouches[i].clientX;
@@ -270,7 +291,7 @@ function setupGameplayInput(difficulty) {
                 else { hitLane(2, false); hitLane(3, false); }
             } else {
                 let lane = Math.floor(touchX / section);
-                if (lane >= 0 && lane <= 3) hitLane(lane, false); // 點擊視為普通音符
+                if (lane >= 0 && lane < laneCount) hitLane(lane, false); 
             }
         }
     };
@@ -299,16 +320,19 @@ function updateGameLoop() {
     const lanes = document.querySelectorAll('.lane');
 
     currentNotesData.forEach(note => {
-        if (!note.element && (note.time - gameTime) <= NOTE_SPEED) {
+        // 使用玩家自訂的 currentNoteSpeed
+        if (!note.element && (note.time - gameTime) <= currentNoteSpeed) {
             let noteEl = document.createElement('div');
             noteEl.className = 'note';
-            if (note.type === 'slide') noteEl.classList.add('slide'); // 加上粉色滑動外觀
-            lanes[note.lane].appendChild(noteEl);
+            if (note.type === 'slide') noteEl.classList.add('slide'); 
+            
+            // 安全防護：避免 JSON 的 lane 寫錯導致當機
+            if (lanes[note.lane]) lanes[note.lane].appendChild(noteEl);
             note.element = noteEl;
         }
 
         if (note.element && !note.hit) {
-            let progress = 1 - ((note.time - gameTime) / NOTE_SPEED);
+            let progress = 1 - ((note.time - gameTime) / currentNoteSpeed);
             note.element.style.top = `${progress * 85}%`;
 
             if ((gameTime - note.time) > 0.18) {
@@ -332,6 +356,15 @@ function showScoreboard() {
     document.getElementById('res-a').innerText = stats.A;
     document.getElementById('res-c').innerText = stats.C;
     document.getElementById('res-max').innerText = stats.maxCombo;
+    
+    // 設定結算畫面的模式浮水印
+    let modeText = "";
+    if (currentDifficulty === 'extreme-easy') modeText = "MODE: EXTREME EASY (極度簡單)";
+    else if (currentDifficulty === 'easy') modeText = "MODE: EASY (簡單)";
+    else if (currentDifficulty === 'normal') modeText = "MODE: NORMAL (普通)";
+    else if (currentDifficulty === 'hard') modeText = "MODE: HARD (稍微困難 - 6 KEYS)";
+    document.getElementById('res-mode-label').innerText = modeText;
+
     showScene('step-result');
 }
 
