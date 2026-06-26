@@ -4,7 +4,8 @@ let nextBeatTime = 0; let beatInterval = 0.5; let audioTimerId; let animationFra
 
 let currentNotesData = [];
 let gameStartTime = 0;
-let gameOverTimer = null; // 控制結算的計時器
+let gameOverTimer = null; 
+let currentDifficulty = '';
 const NOTE_SPEED = 2.0; 
 const frequencies = [329.63, 392.00, 440.00, 523.25];
 
@@ -29,7 +30,7 @@ function showScene(sceneId) {
     document.getElementById(sceneId).classList.remove('hidden');
 }
 
-// 階段一、二、三：初始化與延遲校正
+// ================= 階段一、二、三 =================
 function selectDevice(type) { gameConfig.device = type; requestFullscreen(); showScene('step-audio'); }
 function selectAudio(hasHeadphones) {
     gameConfig.hasHeadphones = hasHeadphones;
@@ -68,7 +69,7 @@ function renderCalibrationLoop() {
 function goBackToAudio() { clearTimeout(audioTimerId); cancelAnimationFrame(animationFrameId); showScene('step-audio'); }
 function confirmLatency() { clearTimeout(audioTimerId); cancelAnimationFrame(animationFrameId); enterSongSelect(); }
 
-// 階段四：歌曲選單
+// ================= 階段四：選單與賽前準備 =================
 const carousel = document.getElementById('carousel-container');
 function enterSongSelect() { showScene('step-song-select'); initCarousel(); }
 function initCarousel() {
@@ -111,29 +112,44 @@ window.addEventListener('touchend', e => {
 function openModal() { document.getElementById('selected-song-title').innerText = songs[currentSongIndex].name; document.getElementById('difficulty-modal').classList.remove('hidden'); }
 function closeModal() { document.getElementById('difficulty-modal').classList.add('hidden'); }
 
-// ======== 修改重點 2：徹底修復第二局凍結 Bug ========
-function startGame(difficulty) {
-    closeModal(); 
-    showScene('step-game');
+// 賽前準備視窗 (2秒後出現按鈕)
+let preGameReady = false;
+function prepareGame(difficulty) {
+    currentDifficulty = difficulty;
+    closeModal();
+    showScene('pre-game-modal');
+    preGameReady = false;
+    document.getElementById('start-game-btn').classList.add('hidden');
     
-    // 嚴格清空上一局的計時器，防止卡在結算畫面前
-    if (gameOverTimer) {
-        clearTimeout(gameOverTimer);
-        gameOverTimer = null;
+    let rulesText = "";
+    if (difficulty === 'extreme-easy') rulesText = "【極度簡單】<br>點擊螢幕任意處或鍵盤任意鍵即可。";
+    else if (difficulty === 'easy') rulesText = "【簡單模式】<br>將螢幕分左右兩側。<br>電腦版：左 F / 右 J。";
+    else if (difficulty === 'normal') rulesText = "【普通模式】<br>四軌獨立判定。<br>電腦版：D, F, J, K。";
+    else if (difficulty === 'hard') rulesText = "【稍微困難】<br>出現粉色滑動音符！<br>手機版：請用手指在螢幕上滑過軌道。<br>電腦版：滑動鍵為 S(左一), E(左二), I(右二), L(右一)，一般鍵為 D, F, J, K。";
+    
+    document.getElementById('pre-game-rules').innerHTML = rulesText;
+
+    setTimeout(() => {
+        preGameReady = true;
+        document.getElementById('start-game-btn').classList.remove('hidden');
+    }, 2000);
+}
+
+// 監聽 Enter 鍵直接開始
+window.addEventListener('keydown', (e) => {
+    if (!document.getElementById('pre-game-modal').classList.contains('hidden') && preGameReady && e.key === 'Enter') {
+        startGame();
     }
+});
+
+// ================= 階段五：判定系統與遊戲核心 =================
+function startGame() {
+    showScene('step-game');
+    if (gameOverTimer) { clearTimeout(gameOverTimer); gameOverTimer = null; }
     
     stats = { S: 0, A: 0, C: 0, combo: 0, maxCombo: 0 };
     updateComboDisplay();
-
-    const ruleToast = document.getElementById('rule-toast');
-    if (difficulty === 'extreme-easy') ruleToast.innerText = "【極度簡單】 按任意鍵";
-    else if (difficulty === 'easy') ruleToast.innerText = "【簡單模式】 左(F) / 右(J)";
-    else if (difficulty === 'normal') ruleToast.innerText = "【普通模式】 D, F, J, K";
-    
-    ruleToast.classList.remove('hidden'); ruleToast.style.animation = 'none';
-    void ruleToast.offsetWidth; ruleToast.style.animation = 'fadeOutUp 2.5s forwards';
-
-    setupGameplayInput(difficulty);
+    setupGameplayInput(currentDifficulty);
     loadAndPlaySong(); 
 }
 
@@ -155,48 +171,88 @@ function showJudgement(type) {
 }
 function updateComboDisplay() { document.getElementById('judgement-text').innerText = ""; document.getElementById('combo-text').innerText = ""; }
 
-// ======== 修改重點 3：全新高精度判定系統 ========
-function hitLane(laneIndex) {
+// 高精度判定：區分滑動與點擊，並加入「太早按」的 C 判定
+function hitLane(laneIndex, isSlideInput) {
     const pad = document.getElementById(`pad-${laneIndex}`);
     if (pad) {
         pad.classList.add('active');
-        playPing(frequencies[laneIndex], audioCtx.currentTime, 0.1);
+        if(!isSlideInput) playPing(frequencies[laneIndex], audioCtx.currentTime, 0.1);
         setTimeout(() => pad.classList.remove('active'), 100);
     }
 
     let gameTime = audioCtx.currentTime - (gameConfig.latency / 1000) - gameStartTime;
     
-    // 步驟 1：找出在有效判定區間內 (±0.2秒內) 且還沒被打擊過的所有音符
-    let validNotes = currentNotesData.filter(n => !n.hit && n.lane === laneIndex && Math.abs(n.time - gameTime) <= 0.2);
+    // 找出在有效區間內的未擊打音符 (放大判定範圍到 0.4 秒前，用來抓「太早按」)
+    let validNotes = currentNotesData.filter(n => !n.hit && n.lane === laneIndex && (n.time - gameTime) > -0.2 && (n.time - gameTime) < 0.4);
     
     if (validNotes.length > 0) {
-        // 步驟 2：從有效音符中，找出「距離當前時間最近」的那一顆，保證不會抓到其他顆
+        // 尋找目標：如果是滑動輸入，只找滑動音符；否則找普通音符。如果極度簡單/簡單則不強制區分。
         let target = validNotes.sort((a, b) => Math.abs(a.time - gameTime) - Math.abs(b.time - gameTime))[0];
         
-        let offset = Math.abs(target.time - gameTime);
-        target.hit = true; 
-
-        if (offset <= 0.08) {
-            stats.S++; showJudgement('S+');
-        } else {
-            stats.A++; showJudgement('A');
+        // 在「稍微困難」模式下，嚴格要求滑動鍵只能打滑動音符，普通鍵打普通音符
+        if (currentDifficulty === 'hard') {
+            let isSlideNote = (target.type === 'slide');
+            if (isSlideInput !== isSlideNote) return; // 鍵位錯誤，直接忽略
         }
+
+        let timeDiff = target.time - gameTime; // 正數代表提早，負數代表太晚
         
-        if (target.element) target.element.style.display = 'none'; // 擊中瞬間消失
+        // 如果是點擊(Tap)，且提早太多(>0.18秒)，嚴格判定為 C！滑動則給予寬容，不計 Early Miss。
+        if (!isSlideInput && timeDiff > 0.18) {
+            target.hit = true; 
+            stats.C++; showJudgement('C');
+            if (target.element) target.element.style.opacity = '0.3'; 
+            return;
+        }
+
+        let offset = Math.abs(timeDiff);
+        
+        if (offset <= 0.18) {
+            target.hit = true; 
+            if (offset <= 0.08) { stats.S++; showJudgement('S+'); } 
+            else { stats.A++; showJudgement('A'); }
+            if (target.element) target.element.style.display = 'none'; 
+        }
     }
 }
 
+// 鎖定手機滑動亂跑 (全域鎖定 touchmove)
+window.addEventListener('touchmove', (e) => {
+    if (!document.getElementById('step-game').classList.contains('hidden')) {
+        e.preventDefault(); 
+        
+        // 手機版滑動 (Slide) 判定
+        if (currentDifficulty === 'hard') {
+            let width = window.innerWidth;
+            let section = width / 4;
+            for(let i=0; i<e.changedTouches.length; i++) {
+                let touchX = e.changedTouches[i].clientX;
+                let lane = Math.floor(touchX / section);
+                if (lane >= 0 && lane <= 3) hitLane(lane, true); // 觸發滑動判定
+            }
+        }
+    }
+}, { passive: false });
+
 function setupGameplayInput(difficulty) {
     window.onkeydown = (e) => {
+        // 解決長按變成連打的 BUG！(e.repeat 判斷)
         if (document.getElementById('step-game').classList.contains('hidden') || e.repeat) return;
         const key = e.key.toLowerCase();
-        if (difficulty === 'extreme-easy') [0, 1, 2, 3].forEach(i => hitLane(i));
+        
+        if (difficulty === 'extreme-easy') [0, 1, 2, 3].forEach(i => hitLane(i, false));
         else if (difficulty === 'easy') {
-            if (key === 'f') { hitLane(0); hitLane(1); }
-            if (key === 'j') { hitLane(2); hitLane(3); }
+            if (key === 'f') { hitLane(0, false); hitLane(1, false); }
+            if (key === 'j') { hitLane(2, false); hitLane(3, false); }
         } else if (difficulty === 'normal') {
-            if (key === 'd') hitLane(0); if (key === 'f') hitLane(1);
-            if (key === 'j') hitLane(2); if (key === 'k') hitLane(3);
+            if (key === 'd') hitLane(0, false); if (key === 'f') hitLane(1, false);
+            if (key === 'j') hitLane(2, false); if (key === 'k') hitLane(3, false);
+        } else if (difficulty === 'hard') {
+            // 電腦版「稍微困難」：區分普通 (dfjk) 與 滑動 (seil)
+            if (key === 'd') hitLane(0, false); if (key === 'f') hitLane(1, false);
+            if (key === 'j') hitLane(2, false); if (key === 'k') hitLane(3, false);
+            if (key === 's') hitLane(0, true); if (key === 'e') hitLane(1, true);
+            if (key === 'i') hitLane(2, true); if (key === 'l') hitLane(3, true);
         }
     };
 
@@ -204,19 +260,17 @@ function setupGameplayInput(difficulty) {
         if (document.getElementById('step-game').classList.contains('hidden')) return;
         e.preventDefault(); 
         let width = window.innerWidth;
+        let section = width / 4;
 
         for(let i=0; i<e.changedTouches.length; i++) {
             let touchX = e.changedTouches[i].clientX;
-            if (difficulty === 'extreme-easy') [0, 1, 2, 3].forEach(lane => hitLane(lane));
+            if (difficulty === 'extreme-easy') [0, 1, 2, 3].forEach(lane => hitLane(lane, false));
             else if (difficulty === 'easy') {
-                if (touchX < width / 2) { hitLane(0); hitLane(1); }
-                else { hitLane(2); hitLane(3); }
-            } else if (difficulty === 'normal') {
-                let section = width / 4;
-                if (touchX < section) hitLane(0);
-                else if (touchX < section * 2) hitLane(1);
-                else if (touchX < section * 3) hitLane(2);
-                else hitLane(3);
+                if (touchX < width / 2) { hitLane(0, false); hitLane(1, false); }
+                else { hitLane(2, false); hitLane(3, false); }
+            } else {
+                let lane = Math.floor(touchX / section);
+                if (lane >= 0 && lane <= 3) hitLane(lane, false); // 點擊視為普通音符
             }
         }
     };
@@ -238,7 +292,6 @@ async function loadAndPlaySong() {
     }
 }
 
-// 畫面渲染循環
 function updateGameLoop() {
     if (document.getElementById('step-game').classList.contains('hidden')) return;
 
@@ -249,20 +302,17 @@ function updateGameLoop() {
         if (!note.element && (note.time - gameTime) <= NOTE_SPEED) {
             let noteEl = document.createElement('div');
             noteEl.className = 'note';
+            if (note.type === 'slide') noteEl.classList.add('slide'); // 加上粉色滑動外觀
             lanes[note.lane].appendChild(noteEl);
             note.element = noteEl;
         }
 
         if (note.element && !note.hit) {
             let progress = 1 - ((note.time - gameTime) / NOTE_SPEED);
-            // 改為跟打擊墊同樣的 top: 85% 對齊法，當 progress=1 時完美重疊
             note.element.style.top = `${progress * 85}%`;
 
-            // 如果錯過視窗 (>0.2秒)，強制判定為 C (Miss)
-            if ((gameTime - note.time) > 0.2) {
-                note.hit = true;
-                stats.C++;
-                showJudgement('C');
+            if ((gameTime - note.time) > 0.18) {
+                note.hit = true; stats.C++; showJudgement('C');
                 note.element.style.opacity = '0.3'; 
             }
         }
@@ -273,7 +323,6 @@ function updateGameLoop() {
     if (unhitNotes.length > 0) {
         requestAnimationFrame(updateGameLoop);
     } else {
-        // 遊戲結束，等待 2 秒顯示結算
         if(!gameOverTimer) gameOverTimer = setTimeout(showScoreboard, 2000);
     }
 }
@@ -287,11 +336,7 @@ function showScoreboard() {
 }
 
 function backToMenu() {
-    // 按下返回時，也必須徹底清空計時器
-    if (gameOverTimer) {
-        clearTimeout(gameOverTimer);
-        gameOverTimer = null;
-    }
+    if (gameOverTimer) { clearTimeout(gameOverTimer); gameOverTimer = null; }
     document.querySelectorAll('.note').forEach(el => el.remove());
     showScene('step-song-select');
 }
