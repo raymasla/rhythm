@@ -51,15 +51,23 @@
         <div id="difficulty-modal" class="hidden">
             <div class="modal-content">
                 <h2 id="selected-song-title">歌曲名稱</h2>
-                <div class="diff-btn" onclick="startGame('extreme-easy')">極度簡單<br><small>單鍵操作 (任意鍵同發)</small></div>
-                <div class="diff-btn" onclick="startGame('easy')">簡單<br><small>雙鍵操作 (左 F / 右 J)</small></div>
-                <div class="diff-btn" onclick="startGame('normal')">普通<br><small>四鍵模式 (D, F, J, K)</small></div>
+                <div class="diff-btn" onclick="prepareGame('extreme-easy')">極度簡單<br><small>單鍵操作 (任意鍵同發)</small></div>
+                <div class="diff-btn" onclick="prepareGame('easy')">簡單<br><small>雙鍵操作 (左 F / 右 J)</small></div>
+                <div class="diff-btn" onclick="prepareGame('normal')">普通<br><small>四鍵模式 (D, F, J, K)</small></div>
+                <div class="diff-btn" style="border-color: #ff00ff;" onclick="prepareGame('hard')">稍微困難<br><small>加入滑動 (S, E, I, L)</small></div>
                 <div class="close-btn" onclick="closeModal()">返回選單</div>
             </div>
         </div>
 
+        <div id="pre-game-modal" class="scene hidden" style="z-index: 200; background: rgba(0,0,0,0.9);">
+            <div class="modal-content" style="max-width: 450px;">
+                <h2 class="title" style="color: #00f0ff;">操作說明</h2>
+                <p id="pre-game-rules" style="font-size: 1.2rem; line-height: 1.8; text-align: left;"></p>
+                <div id="start-game-btn" class="menu-box btn-small hidden" style="margin: 30px auto 0;" onclick="startGame()">繼續 (或按 Enter)</div>
+            </div>
+        </div>
+
         <div id="step-game" class="scene hidden">
-            <div id="rule-toast" class="hidden">操作規則</div>
             <div id="combo-display">
                 <div id="judgement-text"></div>
                 <div id="combo-text"></div>
