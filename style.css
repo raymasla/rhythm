@@ -67,7 +67,7 @@ body {
 }
 .hit-pad.active { transform: translateY(-50%) scale(0.9); background: rgba(0, 240, 255, 0.6); border-color: #fff; box-shadow: 0 0 30px #00f0ff, inset 0 0 20px #00f0ff; }
 
-/* 專屬粉色滑動軌道打擊墊 */
+/* 粉紅色專屬滑動軌道打擊墊 */
 .hit-pad.slide-pad { border-color: #ff00ff; box-shadow: 0 0 10px rgba(255, 0, 255, 0.2); }
 .hit-pad.slide-pad.active { background: rgba(255, 0, 255, 0.6); border-color: #fff; box-shadow: 0 0 30px #ff00ff, inset 0 0 20px #ff00ff; }
 
@@ -76,7 +76,7 @@ body {
     background: #fff; box-shadow: 0 0 10px #fff; z-index: 10;
 }
 
-/* 混合顏色漸層動態滑動音符 */
+/* 混合漸層動態滑動音符 */
 .note.slide {
     background: linear-gradient(90deg, #ff00ff, #00f0ff, #ff00ff);
     background-size: 200% 100%;
